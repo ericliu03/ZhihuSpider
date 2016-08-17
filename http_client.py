@@ -1,9 +1,7 @@
 import requests
-from data_model import Profile
 import time
 import json
-from Queue import Queue
-from spider import Spider
+from requests.adapters import HTTPAdapter
 
 headers = {"Accept": "*/*",
            "Accept-Encoding": "gzip,deflate",
@@ -25,13 +23,11 @@ class Client:
         self.input_captcha = input_captcha
 
         self.session = requests.Session()
+        self.session.mount('http://www.zhihu.com', HTTPAdapter(max_retries=5))
         self.session.headers.update(headers)
         if proxy:
             print 'Using proxy: ' + proxy
             self.session.proxies.update({'http': proxy})
-        # print 'Getting cookies...'
-        # self.session.get(uri)
-        # self._xsrf = self.session.cookies.get('_xsrf')
 
     def get_captcha(self):
         """Download captcha to a image"""
@@ -52,8 +48,6 @@ class Client:
         data = {'email': self.username,
                 'password': self.password,
                 'remember_me': 'false',
-                # seems included in cookies is enough
-                # '_xsrf': self._xsrf
                 }
         while True:
             response = self.session.post(url='http://www.zhihu.com/login/email',
@@ -79,7 +73,6 @@ class Client:
                 else:
                     print 'need captcha, wait for 30 mins to skip captcha'
                     time.sleep(1800)
-
 
     def get_content(self, url):
         return self.session.get(url=url).content

@@ -1,4 +1,5 @@
 from spider import Spider
+from refresher import Refresher
 from data_model import Profile, SafeSet
 from http_client import Client
 from Queue import Queue
@@ -14,7 +15,7 @@ from abc import ABCMeta, abstractmethod
 MY_USERNAME = 'liu-yang-26-15'
 MY_ID = '23c76e145e5fcbd5da3402f39c8eb56e'
 PROXIES = ['117.135.250.132:82', '117.135.250.133:81', '61.153.17.62:1080', '117.135.251.131:80', '117.135.251.135:80',
-           '117.135.251.134:83', '117.135.251.136:80', '183.61.236.54:3128', '117.135.251.133:81','120.198.233.211:80']
+           '117.135.251.134:83', '117.135.251.136:80', '117.135.251.133:81','120.198.233.211:80']
 
 
 class Scheduler(object):
@@ -28,10 +29,7 @@ class Scheduler(object):
         self.db = DBAccessor(db_name, db_collection)
         self.queue = Queue()
         self.workers = None
-        logging.basicConfig(level=logging.DEBUG,
-                            format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                            datefmt='%m-%d %H:%M',
-                            filename='./log/myapp.log')
+
 
     @abstractmethod
     def create_thread(self, index):
@@ -53,7 +51,7 @@ class Scheduler(object):
     def log_tick(self, dead_thread):
         pass
 
-    def create_threads(self):
+    def create_client(self):
         threads = []
         for index in xrange(self.num_threads):
             print 'Starting spider No.', index
@@ -79,7 +77,7 @@ class Scheduler(object):
                 else:
                     logging.info('all thread dead, wait for 3 mins before reconnect')
                     time.sleep(180)
-                    workers = self.create_threads()
+                    workers = self.create_client()
         self.log_tick(dead_thread)
 
     def graceful_shutdown(self, *args):
@@ -109,7 +107,7 @@ class SpiderScheduler(Scheduler):
         self.safe_set = SafeSet(self.db)
 
         self.load_data_to_queue()
-        self.workers = self.create_threads()
+        self.workers = self.create_client()
 
     def load_data_to_queue(self):
         print 'Loading queue from last time...'
@@ -155,14 +153,17 @@ class RefresherScheduler(Scheduler):
     def __init__(self, use_proxy=False, db_name='zhihu', db_collection='users_refresh', num_threads=2):
         super(RefresherScheduler, self).__init__(use_proxy=use_proxy, db_name=db_name,
                                                  db_collection=db_collection, num_threads=num_threads)
-        self.workers = self.create_threads()
+        self.workers = self.create_client()
         self.count = 0
+        self.load_data_to_queue()
 
     def create_thread(self, index):
-        pass
+        proxy = 'http://' + PROXIES[index] if self.use_proxy else None
+        new_client = Client(proxy=proxy)
+        return new_client
 
     def get_worker_object(self, **kwargs):
-        pass
+        return Refresher('worker: ' + str(kwargs['index']), self.queue, kwargs['new_client'], self.db)
 
     def save_queue(self):
         pass
@@ -180,4 +181,4 @@ class RefresherScheduler(Scheduler):
         logging.info("{} of users remaining...".format(self.count))
         logging.info('healthy threads: %d/%d' % (self.num_threads - dead_thread, self.num_threads))
         print datetime.now(), 'healthy threads: %d/%d' % (self.num_threads - dead_thread, self.num_threads), \
-            "{} of users remaining...".format(self.count)
+            "{} of users remaining...".format(self.queue.qsize())
